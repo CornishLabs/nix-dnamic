@@ -8,21 +8,30 @@
     let
       pkgs = extrapkg.pkgs;
       artiq = extrapkg.packages.x86_64-linux;
-    in {
-      packages.x86_64-linux.default = pkgs.buildEnv {
-        name = "artiq-env";
-        paths = [
-          (pkgs.python3.withPackages(ps : [
+      python-env = pkgs.python3.withPackages(ps : [
             artiq.artiq
             ps.pandas
-            ps.numba
-            ps.matplotlib
-            # Note that NixOS also provides packages ps.numpy and ps.scipy, but it is
-            # not necessary to explicitly add these, since they are dependencies of
-            # ARTIQ and incorporated with an ARTIQ install anyway.
-          ]))
-          pkgs.gtkwave
-        ];
-      };
+      ]);
+    artiq-master-dev = pkgs.mkShell {
+      name = "artiq-master-dev";
+      buildInputs = [ 
+        python-env 
+      ];
+      shellHook = ''
+        if [ -z "$OITG_SCRATCH_DIR" ]; then
+          echo "OITG_SCRATCH_DIR environment variable not set, defaulting to ~/scratch."
+          export OITG_SCRATCH_DIR=$HOME/scratch
+          export QT_PLUGIN_PATH=${pkgs.qt5.qtbase}/${pkgs.qt5.qtbase.dev.qtPluginPrefix}
+          export QML2_IMPORT_PATH=${pkgs.qt5.qtbase}/${pkgs.qt5.qtbase.dev.qtQmlPrefix}
+        fi
+        ${
+          ./src/setup-artiq-master-dev.sh
+        } ${python-env} ${python-env.sitePackages} || exit 1
+        source $OITG_SCRATCH_DIR/nix-oitg-venvs/artiq-master-dev/bin/activate || exit 1
+      '';
     };
+  in {
+    inherit artiq-master-dev;
+    devShells.x86_64-linux.default = artiq-master-dev;
+  };
 }
