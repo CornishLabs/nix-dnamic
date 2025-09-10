@@ -18,16 +18,16 @@
         python-env 
       ];
       shellHook = ''
-        if [ -z "$OITG_SCRATCH_DIR" ]; then
-          echo "OITG_SCRATCH_DIR environment variable not set, defaulting to ~/scratch."
-          export OITG_SCRATCH_DIR=$HOME/scratch
+        if [ -z "SCRATCH_DIR" ]; then
+          echo "SCRATCH_DIR environment variable not set, defaulting to ~/scratch."
+          export SCRATCH_DIR=$HOME/scratch
           export QT_PLUGIN_PATH=${pkgs.qt5.qtbase}/${pkgs.qt5.qtbase.dev.qtPluginPrefix}
           export QML2_IMPORT_PATH=${pkgs.qt5.qtbase}/${pkgs.qt5.qtbase.dev.qtQmlPrefix}
         fi
         ${
           ./src/setup-artiq-master-dev.sh
         } ${python-env} ${python-env.sitePackages} || exit 1
-        source $OITG_SCRATCH_DIR/nix-oitg-venvs/artiq-master-dev/bin/activate || exit 1
+        source $SCRATCH_DIR/nix-artiq-venvs/artiq-master-dev/bin/activate || exit 1
       '';
     };
   in {

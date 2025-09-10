@@ -1,89 +1,48 @@
-Nix flakes for the Oxford Ion Trap Quantum Computing group
+Nix flakes for Durham Neutral Atom and Molecule Improved Control
 ==========================================================
 
 This repository contains derivations for deploying ARTIQ via the
-Nix package manager.
+[Nix package manager](https://nixos.org/download/).
 
-To use, first set up Nix as described on its [website][nix]. Make
-sure you have version 2.4 or higher (tested: 2.6–2.24). Both single-user
-and multi-user installs work fine for our purposes. If you choose
-the latter, you will probably want to add your user to the trusted
-users to be able to mark the binary caches as trusted (see below).
+This is a de-oxforded version of the [`nix-oitg`](https://github.com/OxfordIonTrapGroup/nix-oitg.git) repository as described in  their readme.
 
-Then, to set up an environment suitable for running `artiq_master`
-and related processes, clone this repository, e.g. into your
-scratch folder:
+For now, this only installs artiq, and some extra python dependencies, additional dependencies will be installed into the python venv via pip.
+
+Everything exists in a `~/scratch` directory.
 
 ```
-$ cd ~/scratch
-$ git clone https://github.com/OxfordIonTrapGroup/nix-oitg.git
+# Make the scratch directory
+cd ~/
+mkdir scratch
+cd ~/scratch
+
+# Clone this repo (that contains a flake that sets up a dev shell)
+git clone https://github.com/tomhepz/nix-dnamic
+
+# Clone the relevant repositorys to be installed into the python venv
+git clone https://github.com/OxfordIonTrapGroup/oitg
+git clone https://github.com/tomhepz/ndscan
+
+
+# Create the dev environment
+# This command will:
+#  - Use nix flakes to install relevant packages (artiq, python, certain python packages e.g. pandas) within a nix context
+#  - Then use a shell hook to manage a python virtual environment that will be stored in `~/scratch/nix-artiq-venvs`
+
+nix develop ~/scratch/nix-dnamic
+
+# Then install the python packages into this environment, as the shell hook script describes
+
+pip install --config-settings editable_mode=compat -e ~/scratch/oitg
+pip install --config-settings editable_mode=compat -e ~/scratch/ndscan
+
+# Then run artiq with the ndscan package, for some reason I have required
+# running the frontend command with the `python` activated with the dev shell directly...
+
+python -m artiq.frontend.artiq_master
+ndscan_dataset_janitor 
+python -m artiq_comtools.artiq_ctlmgr
+python -m artiq.frontend.artiq_dashboard -p ndscan.dashboard_plugin
 ```
 
-Now, just run ``nix develop`` and follow the instructions on screen:
-```
-$ nix develop ~/scratch/nix-oitg
-```
 
-
-Binary caches/substituters
---------------------------
-
-The Nix flake, together with its dependencies, provides a complete
-set of instructions on how to build all the components necessary to
-run ARTIQ from scratch (i.e., the respective source code). This,
-however, is quite a slow process, as it includes big projects such
-as LLVM, Rust, Python, etc. As building everything from source every
-time clearly isn't necessary, Nix allows one to configure
-"substituters", servers that can provide pre-built binary packages
-to be downloaded and extracted in place of re-running the build
-process locally on each machine.
-
-This flake configure two extra substituters: First, our local build
-server (10.255.6.197) for custom packages and fast installs, and,
-as a fallback, the M-Labs build server. While we have some
-customisations to ARTIQ itself, the latter is still useful for
-things like Rust and LLVM, even though in normal use, those binaries
-should also be cached by our build server.
-
-The former is accessed via SSH through a special, locked-down
-`nix-ssh` user. Authentication should already be set up on the
-group network, but note that Nix rejects connection to hosts the
-SSH host keys of which are not known, rather than prompting you.
-Thus, before running `nix develop`, make sure to connect to the
-build server at least once:
-
-    $ ssh nix-ssh@10.255.6.197
-
-If everything works, you should get a
-`PTY allocation request failed on channel 0` error message, at which
-point you can close the session (e.g. by pressing `Ctrl-C`).
-
-If you are running Nix in multi-user mode, be sure to run this
-as the root user instead:
-
-    $ sudo ssh nix-ssh@10.255.6.197
-
-
-Use outside Oxford
-------------------
-
-This flake pulls in several packages that are internal to the
-Oxford Ion Trap Quantum Computing group, and hosted on our
-private GitLab instance (gitlab.physics.ox.ac.uk). However, at this
-stage, none of these contain any modifications necessary to make use
-of our open-source projects (e.g. ndscan) in your laboratory. If you
-do want to re-use this somewhat idiosyncratic method of deploying
-ARTIQ as well, you will need to comment out the Oxford-specific
-packages in `flake.nix` and change the URLs for `artiq.git` etc. to
-refer to the public upstream repositories instead.
-
-
-Development notes
------------------
-
-Please keep the Nix code formatted using `nixfmt`. You can easily
-get it from Nix itself, e.g. using `nix shell nixpkgs#nixfmt`.
-
-
-
-[nix]: https://nixos.org/download.html

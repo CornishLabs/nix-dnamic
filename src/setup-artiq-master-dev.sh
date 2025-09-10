@@ -35,7 +35,7 @@ nix_python_root=$1
 nix_site_pkgs_subdir=$2
 
 # Create/activate venv.
-venv_root="${OITG_SCRATCH_DIR}/nix-oitg-venvs"
+venv_root="${SCRATCH_DIR}/nix-artiq-venvs"
 venv_name="artiq-master-dev"
 venv_path="${venv_root}/${venv_name}"
 if [[ -d "${venv_path}" ]]; then
@@ -98,11 +98,11 @@ but additional packages not distributed via Nix can be installed using ${blue}pi
 as usual.
 
 This can be particularly useful to install packages in development mode while
-actively working on code (e.g. in oxart). For instance, after cloning the
-oxart repository to ~/scratch/oxart, installing it in development mode using
-    ${blue}pip install --config-settings editable_mode=compat -e ~/scratch/oxart${reset}
+actively working on code (e.g. in ndscan). For instance, after cloning the
+ndscan repository to ~/scratch/ndscan, installing it in development mode using
+    ${blue}pip install --config-settings editable_mode=compat -e ~/scratch/ndscan${reset}
 will take precedence over the Nix-provided version inside this environment,
-such that changes to the code in ~/scratch/oxart immediately take effect.
+such that changes to the code in ~/scratch/ndscan immediately take effect.
 (The ${grey}--config-settings editable_mode=compat${reset} argument is necessary
 for the installation to take precedence over the Nix-provided packages with
 recent versions of setuptools.)
@@ -113,13 +113,13 @@ activate the venv outside of Nix, nor deactivate the venv while in the Nix shell
 
 The venv directory ${blue}${venv_path}${reset} is not
 managed by Nix and persists across ${blue}nix develop${reset} invocations. To revert all
-libraries to the versions specified in the ${blue}nix-oitg${reset} flake (and remove any
+libraries to the versions specified in the ${blue}nix-dnamic${reset} flake (and remove any
 additionally installed libraries), simply delete the directory; it will be
 re-created on the next ${blue}nix develop${reset} run.
 
 """
     else
-        warn "Python venv not created; set OITG_SCRATCH_DIR environment variable to target path."
+        warn "Python venv not created; set SCRATCH_DIR environment variable to target path."
         exit 2
     fi
 fi
@@ -139,5 +139,5 @@ if [[ ! -d ${venv_site_packages} ]]; then
 fi
 echo "${nix_python_root}/${nix_site_pkgs_subdir}" > ${venv_site_packages}/nix.pth
 
-echo "Activated nix-oitg Nix environment with nested Python venv ${blue}${venv_name}${reset}."
+echo "Activated nix-dnamic Nix environment with nested Python venv ${blue}${venv_name}${reset}."
 echo "To exit the Nix shell, use ${blue}exit${reset} or ${blue}Ctrl+D${reset}."
