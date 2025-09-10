@@ -18,7 +18,7 @@
         python-env 
       ];
       shellHook = ''
-        if [ -z "SCRATCH_DIR" ]; then
+        if [ -z "$SCRATCH_DIR" ]; then
           echo "SCRATCH_DIR environment variable not set, defaulting to ~/scratch."
           export SCRATCH_DIR=$HOME/scratch
           export QT_PLUGIN_PATH=${pkgs.qt5.qtbase}/${pkgs.qt5.qtbase.dev.qtPluginPrefix}
