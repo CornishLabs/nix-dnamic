@@ -4,7 +4,7 @@ Nix flakes for Durham Neutral Atom and Molecule Improved Control
 This repository contains derivations for deploying ARTIQ via the
 [Nix package manager](https://nixos.org/download/).
 
-This is a de-oxforded version of the [`nix-oitg`](https://github.com/OxfordIonTrapGroup/nix-oitg.git) repository as described in  their readme.
+This is a de-oxforded version of the [`nix-oitg`](https://github.com/OxfordIonTrapGroup/nix-oitg.git) repository as described in their readme.
 
 For now, this only installs artiq, and some extra python dependencies, additional dependencies will be installed into the python venv via pip.
 
