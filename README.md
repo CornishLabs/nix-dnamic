@@ -39,6 +39,11 @@ pip install --config-settings editable_mode=compat -e ~/scratch/ndscan
 # Then run artiq with the ndscan package, for some reason I have required
 # running the frontend command with the `python` activated with the dev shell directly...
 
+cd ~/artiq-master
+
+> $ (artiq-master-dev) tom@tom-artiq-test-rig:~/artiq-master$ ls
+> device_db.py  repository
+
 python -m artiq.frontend.artiq_master
 ndscan_dataset_janitor 
 python -m artiq_comtools.artiq_ctlmgr
