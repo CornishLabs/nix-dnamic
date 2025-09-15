@@ -36,8 +36,7 @@
             ./src/setup-artiq-master-dev.sh
           } ${python-env} ${python-env.sitePackages} || exit 1
           source $SCRATCH_DIR/nix-artiq-venvs/artiq-master-dev/bin/activate || exit 1
-
-          export PYTHONPATH="$SCRATCH_DIR:${PYTHONPATH:-}"
+          export PYTHONPATH="''${SCRATCH_DIR:-}''${PYTHONPATH:+:$PYTHONPATH}"
         '';
       };
   in {
