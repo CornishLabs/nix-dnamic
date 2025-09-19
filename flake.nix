@@ -11,6 +11,7 @@
       python-env = pkgs.python3.withPackages(ps : [
             artiq.artiq
             ps.pandas
+            ps.matplotlib
       ]);
 
       artiq-lab-tmux = pkgs.writeShellApplication {
