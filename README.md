@@ -44,6 +44,11 @@ cd ~/artiq-master
 > $ (artiq-master-dev) tom@tom-artiq-test-rig:~/artiq-master$ ls
 > device_db.py  repository
 
+# Then run either:
+artiq-lab-tmux
+# Which will run all commands in a TMUX session (Recommended)
+
+# OR run the commands individually
 python -m artiq.frontend.artiq_master
 ndscan_dataset_janitor 
 python -m artiq_comtools.artiq_ctlmgr
