@@ -49,6 +49,8 @@ artiq-lab-tmux
 # Which will run all commands in a TMUX session (Recommended)
 
 # OR run the commands individually
+# THIS IS DEPRICATED FOR THE SETUP, BECAUSE NEED TO SET HOME ENV VARIABLES TO GET THE ARTIQ FOLDER STRUCTURE TO WORK AS MODULES
+# BUT THESE ARE THE COMMANDS THAT WOULD START COMPONENTS OF 'NORMAL'/'BARE' ARTIQ
 python -m artiq.frontend.artiq_master
 ndscan_dataset_janitor 
 python -m artiq_comtools.artiq_ctlmgr
