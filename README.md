@@ -17,7 +17,7 @@ mkdir scratch
 cd ~/scratch
 
 # Clone this repo (that contains a flake that sets up a dev shell)
-git clone https://github.com/tomhepz/nix-dnamic
+git clone https://github.com/CornishLabs/dnamic-setup
 
 # Clone the relevant repositorys to be installed into the python venv
 git clone https://github.com/OxfordIonTrapGroup/oitg
@@ -29,12 +29,12 @@ git clone https://github.com/tomhepz/ndscan
 #  - Use nix flakes to install relevant packages (artiq, python, certain python packages e.g. pandas) within a nix context
 #  - Then use a shell hook to manage a python virtual environment that will be stored in `~/scratch/nix-artiq-venvs`
 
-nix develop ~/scratch/nix-dnamic
+nix develop ~/scratch/dnamic-setup
 
 # Then install the python packages into this environment, as the shell hook script describes
 
-pip install --config-settings editable_mode=compat -e ~/scratch/oitg
-pip install --config-settings editable_mode=compat -e ~/scratch/ndscan
+pip install --config-settings editable_mode=compat --no-dependencies -e ~/scratch/oitg
+pip install --config-settings editable_mode=compat --no-dependencies -e ~/scratch/ndscan
 
 # Then run artiq with the ndscan package, for some reason I have required
 # running the frontend command with the `python` activated with the dev shell directly...
