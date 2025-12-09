@@ -159,8 +159,10 @@ if should_start "$created_dash"; then
   start_in_window dashboard "$CMD_DASH"
 fi
 
-# Attach (or switch if already in tmux)
-if [[ -n "${TMUX-}" ]]; then
+# Attach (or switch) robustly:
+# - switch-client only if we're already inside *this* tmux server (same socket)
+# - otherwise attach (may create a nested tmux if you're inside a different one)
+if [[ -n "${TMUX-}" && "${TMUX%%,*}" == "$SOCK" ]]; then
   exec "${TMUX[@]}" switch-client -t "$SESSION"
 else
   exec "${TMUX[@]}" attach -t "$SESSION"
