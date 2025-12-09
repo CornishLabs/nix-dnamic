@@ -151,15 +151,24 @@ ensure_window() {
 # Respawn pane to run a command (argv) without a login shell (avoids PATH resets)
 start_in_window() {
   local name="$1"; shift
+
+  # Double quotes + \$… means $1/$@ are expanded by the *inner* bash, not this script.
+  local inner
+  inner="printf \"\n=== [%s] ===\n\" \"\$1\"; shift; \
+printf \"cmd: \"; printf \"%q \" \"\$@\"; printf \"\n\n\"; \
+exec \"\$@\""
+
   local -a bash_argv=(
-    bash -c
-    'printf "\n=== [%s] ===\n" "$1"; shift; printf "cmd: "; printf "%q " "$@"; printf "\n\n"; exec "$@"'
+    bash -c "$inner"
     _ "$name" "$@"
   )
+
   local cmdline
   cmdline="$(printf '%q ' "${bash_argv[@]}")"
+
   "${TMUX[@]}" respawn-pane -k -t "$SESSION:$name" -c "$REPO_ROOT" "$cmdline"
 }
+
 
 # Wait until master prints readiness line (only used right after we start master)
 wait_for_master_ready() {
