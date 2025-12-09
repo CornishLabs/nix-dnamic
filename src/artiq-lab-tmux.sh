@@ -142,7 +142,7 @@ set -euo pipefail
 win="$1"; shift
 
 printf "\n=== [%s] ===\n" "$win"
-printf "----- DEBUG -----\n"
+printf -- "----- DEBUG -----\n"
 printf "pwd=%s\n" "$PWD"
 printf "user=%s uid=%s\n" "${USER-}" "$(id -u 2>/dev/null || echo '?')"
 printf "IN_NIX_SHELL=%s\n" "${IN_NIX_SHELL-}"
@@ -161,7 +161,7 @@ python -c 'import sys; print("sys.executable:", sys.executable); print("sys.pref
 "${ARTIQ_PY:-python}" -c 'import artiq; print("artiq.__version__:", getattr(artiq,"__version__", "?"))' 2>/dev/null || true
 
 printf "cmd: "; printf "%q " "$@"; printf "\n"
-printf "-----------------\n\n"
+printf -- "-----------------\n\n"
 
 exec "$@"
 BASH
@@ -201,7 +201,7 @@ if [ -f "$VENV_PATH/bin/activate" ]; then
 fi
 
 # Debug banner (runs once at shell startup):
-printf "\n=== [shell] ===\n"
+printf -- "\n=== [shell] ===\n"
 printf "----- DEBUG -----\n"
 printf "pwd=%s\n" "\$PWD"
 printf "user=%s uid=%s\n" "\${USER-}" "\$(id -u 2>/dev/null || echo '?')"
@@ -215,7 +215,7 @@ printf "PATH=%s\n" "\${PATH-}"
 printf "python(PATH)="; command -v python 2>/dev/null || echo "not-found"
 python -c 'import sys; print("sys.executable:", sys.executable); print("sys.prefix:", sys.prefix); print("sys.base_prefix:", getattr(sys,"base_prefix",""))' 2>/dev/null || true
 python -c 'import artiq; print("artiq.__version__:", getattr(artiq,"__version__", "?"))' 2>/dev/null || true
-printf "-----------------\n\n"
+printf -- "-----------------\n\n"
 EOF
 
 created_session=0
