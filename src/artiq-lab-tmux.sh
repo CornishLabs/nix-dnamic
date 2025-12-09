@@ -3,45 +3,42 @@ set -Eeuo pipefail
 trap 'echo "Error: ${BASH_SOURCE[0]}:${LINENO}: command failed: ${BASH_COMMAND}" >&2' ERR
 
 read -r -d '' ABOUT <<'EOF' || true
-artiq-lab-tmux.sh — ARTIQ “lab” launcher via tmux
+artiq-lab-tmux.sh — ARTIQ “lab” launcher via tmux (Option A: Nix dev shell owns env)
 
-This script creates/attaches to a tmux session (on a dedicated tmux socket) and
-starts ARTIQ-related processes in separate windows. Each window prints a small
-debug banner at the top showing key environment details (Nix dev-shell markers,
-PATH, VIRTUAL_ENV, PYTHONPATH, and what Python resolves to) before running the
-actual program.
+Principle:
+  - You run this from inside `nix develop` (your shellHook activates the venv and sets PATH/PYTHONPATH).
+  - This script does NOT try to “re-create” that environment; it just:
+      * reuses it,
+      * pushes it into tmux so new panes inherit it,
+      * runs ARTIQ with the venv python explicitly.
 
-Windows created:
-  - master     : ARTIQ master
-  - ctlmgr     : ARTIQ controller manager
-  - janitor    : ndscan dataset janitor
-  - dashboard  : ARTIQ dashboard
-  - shell      : interactive bash with venv activated + debug banner
+What it does:
+  1) Uses a dedicated tmux socket (not /tmp) to avoid stale tmp sockets:
+       ${XDG_RUNTIME_DIR:-$SCRATCH_DIR/.run}/tmux-${SESSION}.sock
 
-Startup order (only when the session is newly created, or when a window was missing):
-  1) master (wait until "ARTIQ master is now ready." or timeout)
-  2) ctlmgr (then wait WAIT seconds)
-  3) janitor (then wait WAIT seconds)
-  4) dashboard
+  2) Deletes a stale socket if it exists but no tmux server responds.
 
-Output on crash:
-  - The session enables `remain-on-exit on` so panes stay visible after exit.
+  3) Creates/attaches to tmux session $SESSION and ensures windows:
+       - master, ctlmgr, janitor, dashboard, shell
+
+  4) Prints a debug banner at the top of each program pane (env + python info).
+
+  5) Starts in order when the session is first created (or a window was missing):
+       master -> wait for readiness line (or timeout) -> ctlmgr -> wait -> janitor -> wait -> dashboard
+
+  6) Enables `remain-on-exit on` so crashed panes stay visible.
 
 Usage:
   artiq-lab-tmux.sh [--help]
 
-Controls (env vars):
-  SESSION               Session name (default: artiq)
-  REPO_ROOT             Working directory for windows (default: current directory)
-  SCRATCH_DIR           Scratch path (default: ~/scratch)
-  VENV_NAME             Venv name under $SCRATCH_DIR/nix-artiq-venvs (default: artiq-master-dev)
-  VENV_PATH             Override full venv path (default derived from SCRATCH_DIR+VENV_NAME)
-  WAIT                  Seconds between ctlmgr/janitor/dashboard startups (default: 5)
-  MASTER_READY_TIMEOUT  Seconds to wait for readiness line (default: 60)
+Controls:
+  SESSION, REPO_ROOT, SCRATCH_DIR, WAIT, MASTER_READY_TIMEOUT
+  VENV_NAME (default: artiq-master-dev)
+  VENV_PATH (override full venv path; default: $SCRATCH_DIR/nix-artiq-venvs/$VENV_NAME)
 
 Notes:
-  - If the session already exists, this script will NOT restart running programs.
-  - If you delete/close a window, re-running the script recreates that window and starts it.
+  - If session already exists, it will NOT restart running programs.
+  - If you close a window, rerun the script to recreate/start it.
 EOF
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -65,29 +62,44 @@ SOCK="$SOCK_DIR/tmux-${SESSION}.sock"
 
 TMUX=(tmux -S "$SOCK" -u -2)
 
-# Ensure Python flushes output promptly (helps readiness + logs)
+# Make Python flush promptly (helps readiness + logs)
 : "${PYTHONUNBUFFERED:=1}"
 export PYTHONUNBUFFERED
 
-# --- Venv resolution (robust: use absolute venv python) ---
+# Do NOT modify PATH/PYTHONPATH in ways that duplicate shellHook work.
+# We only ensure the repo is on PYTHONPATH (shellHook already puts SCRATCH_DIR there).
+prepend_unique() {
+  local dir="$1" var="$2"
+  local cur="${!var-}"
+  [[ -z "$dir" ]] && return 0
+  case ":$cur:" in
+    *":$dir:"*) ;;  # already present
+    *) printf -v "$var" '%s' "$dir${cur:+:$cur}" ;;
+  esac
+}
+
+prepend_unique "$REPO_ROOT" PYTHONPATH
+export PYTHONPATH
+
+# --- Venv resolution (robust: use absolute venv python for ARTIQ processes) ---
 VENV_NAME="${VENV_NAME:-artiq-master-dev}"
 VENV_PATH="${VENV_PATH:-$SCRATCH_DIR/nix-artiq-venvs/$VENV_NAME}"
 export VENV_PATH
 
+# Prefer the active venv if present (best signal that you're in nix develop + shellHook)
+if [[ -n "${VIRTUAL_ENV-}" ]]; then
+  VENV_PATH="$VIRTUAL_ENV"
+  export VENV_PATH
+fi
+
 if [[ ! -x "$VENV_PATH/bin/python" ]]; then
   echo "Error: expected venv python at: $VENV_PATH/bin/python" >&2
-  echo "Are you inside 'nix develop' (so the shellHook creates/activates the venv)?" >&2
+  echo "Run this inside 'nix develop' (so the shellHook creates/activates the venv), or set VENV_PATH." >&2
   exit 1
 fi
 
-export VIRTUAL_ENV="$VENV_PATH"
-export PATH="$VENV_PATH/bin${PATH:+:$PATH}"
-
 PY="$VENV_PATH/bin/python"
 export ARTIQ_PY="$PY"
-
-# Make ARTIQ processes see scratch + repo on sys.path.
-export PYTHONPATH="${SCRATCH_DIR}:$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 # Refuse to touch non-sockets
 if [[ -e "$SOCK" && ! -S "$SOCK" ]]; then
@@ -96,7 +108,7 @@ if [[ -e "$SOCK" && ! -S "$SOCK" ]]; then
   exit 1
 fi
 
-# Remove stale socket (socket exists, but no server responds)
+# Remove stale socket
 if [[ -S "$SOCK" ]] && ! "${TMUX[@]}" -q list-sessions >/dev/null 2>&1; then
   echo "Found stale tmux socket at $SOCK; removing it."
   rm -f "$SOCK"
@@ -107,6 +119,7 @@ CMD_MASTER=( "$PY" -u -m artiq.frontend.artiq_master )
 CMD_CTLMGR=( "$PY"    -m artiq_comtools.artiq_ctlmgr )
 CMD_DASH=(   "$PY"    -m artiq.frontend.artiq_dashboard -p ndscan.dashboard_plugin )
 
+# Prefer janitor entrypoint from venv if it exists
 if [[ -x "$VENV_PATH/bin/ndscan_dataset_janitor" ]]; then
   CMD_JANITOR=( "$VENV_PATH/bin/ndscan_dataset_janitor" )
 else
@@ -114,8 +127,10 @@ else
 fi
 
 push_env() {
+  # Push “what nix develop gave us” into tmux, so new panes inherit it.
   for VAR in PYTHONPATH SCRATCH_DIR QT_PLUGIN_PATH QML2_IMPORT_PATH \
-             VIRTUAL_ENV VENV_PATH PATH PYTHONUNBUFFERED ARTIQ_PY IN_NIX_SHELL; do
+             VIRTUAL_ENV PATH PYTHONUNBUFFERED IN_NIX_SHELL \
+             VENV_PATH ARTIQ_PY; do
     [[ -n "${!VAR-}" ]] && "${TMUX[@]}" setenv -g "$VAR" "${!VAR}"
   done
 }
@@ -126,7 +141,6 @@ window_exists() {
       -f "#{==:#{window_name},$name}" 2>/dev/null)" ]]
 }
 
-# Ensure window exists; return 0 if created, 1 if already existed
 ensure_window() {
   local name="$1"
   if window_exists "$name"; then
@@ -136,7 +150,7 @@ ensure_window() {
   return 0
 }
 
-# This runs inside each pane before the real command.
+# Runner prints debug then execs the command.
 read -r -d '' RUNNER <<'BASH' || true
 set -euo pipefail
 win="$1"; shift
@@ -153,12 +167,10 @@ printf "ARTIQ_PY=%s\n" "${ARTIQ_PY-}"
 printf "PYTHONPATH=%s\n" "${PYTHONPATH-}"
 printf "PATH=%s\n" "${PATH-}"
 printf "python(PATH)="; command -v python 2>/dev/null || echo "not-found"
-printf "python(VENV)=";  [[ -n "${ARTIQ_PY-}" ]] && echo "$ARTIQ_PY" || echo "not-set"
+printf "python(ARTIQ_PY)=%s\n" "${ARTIQ_PY-}"
 
-# Python details (best-effort; don't fail the pane if these error)
 python -c 'import sys; print("sys.executable:", sys.executable); print("sys.prefix:", sys.prefix); print("sys.base_prefix:", getattr(sys,"base_prefix",""))' 2>/dev/null || true
-"${ARTIQ_PY:-python}" -c 'import sys; print("venv sys.executable:", sys.executable)' 2>/dev/null || true
-"${ARTIQ_PY:-python}" -c 'import artiq; print("artiq.__version__:", getattr(artiq,"__version__", "?"))' 2>/dev/null || true
+"${ARTIQ_PY:-python}" -c 'import artiq; print("artiq.__version__:", getattr(artiq,"__version__","?"))' 2>/dev/null || true
 
 printf "cmd: "; printf "%q " "$@"; printf "\n"
 printf -- "-----------------\n\n"
@@ -166,14 +178,12 @@ printf -- "-----------------\n\n"
 exec "$@"
 BASH
 
-# Respawn pane to run a command (argv) without a login shell (avoids PATH resets)
 start_in_window() {
   local name="$1"; shift
   "${TMUX[@]}" respawn-pane -k -t "$SESSION:$name" -c "$REPO_ROOT" \
     bash -c "$RUNNER" _ "$name" "$@"
 }
 
-# Wait until master prints readiness line (only used right after we start master)
 wait_for_master_ready() {
   local timeout="${MASTER_READY_TIMEOUT:-60}"
   local needle='ARTIQ master is now ready.'
@@ -188,33 +198,21 @@ wait_for_master_ready() {
   return 1
 }
 
-# Create a rcfile for the interactive "shell" window: source ~/.bashrc, activate venv, print debug.
+# Interactive shell window: source ~/.bashrc and (optionally) activate venv for prompt.
 SHELL_RC="$SOCK_DIR/${SESSION}-shellrc"
 cat >"$SHELL_RC" <<EOF
-# Generated by artiq-lab-tmux.sh for tmux window: shell
-# Keep user's usual interactive settings:
 [ -f "\$HOME/.bashrc" ] && source "\$HOME/.bashrc"
-
-# Activate venv for prompt + functions:
-if [ -f "$VENV_PATH/bin/activate" ]; then
-  source "$VENV_PATH/bin/activate"
+# Cosmetic activation for prompt/functions only (avoid re-activating if already active)
+if [ -n "${VENV_PATH}" ] && [ "\${VIRTUAL_ENV-}" != "${VENV_PATH}" ] && [ -f "${VENV_PATH}/bin/activate" ]; then
+  source "${VENV_PATH}/bin/activate"
 fi
-
-# Debug banner (runs once at shell startup):
-printf -- "\n=== [shell] ===\n"
-printf "----- DEBUG -----\n"
-printf "pwd=%s\n" "\$PWD"
-printf "user=%s uid=%s\n" "\${USER-}" "\$(id -u 2>/dev/null || echo '?')"
+printf "\n=== [shell] ===\n"
+printf -- "----- DEBUG -----\n"
 printf "IN_NIX_SHELL=%s\n" "\${IN_NIX_SHELL-}"
-printf "SCRATCH_DIR=%s\n" "\${SCRATCH_DIR-}"
-printf "VENV_PATH=%s\n" "\${VENV_PATH-}"
 printf "VIRTUAL_ENV=%s\n" "\${VIRTUAL_ENV-}"
-printf "ARTIQ_PY=%s\n" "\${ARTIQ_PY-}"
 printf "PYTHONPATH=%s\n" "\${PYTHONPATH-}"
-printf "PATH=%s\n" "\${PATH-}"
 printf "python(PATH)="; command -v python 2>/dev/null || echo "not-found"
-python -c 'import sys; print("sys.executable:", sys.executable); print("sys.prefix:", sys.prefix); print("sys.base_prefix:", getattr(sys,"base_prefix",""))' 2>/dev/null || true
-python -c 'import artiq; print("artiq.__version__:", getattr(artiq,"__version__", "?"))' 2>/dev/null || true
+python -c 'import sys; print("sys.executable:", sys.executable)' 2>/dev/null || true
 printf -- "-----------------\n\n"
 EOF
 
@@ -226,13 +224,14 @@ fi
 
 push_env
 
-# Session options: keep output after exit; stable names; lots of scrollback; avoid login shells.
+# Session options
 "${TMUX[@]}" set-option -t "$SESSION" -g remain-on-exit on >/dev/null
 "${TMUX[@]}" set-option -t "$SESSION" -g allow-rename off >/dev/null
 "${TMUX[@]}" set-option -t "$SESSION" -g history-limit 20000 >/dev/null
+# Avoid login shells (they often reset PATH via /etc/profile, ~/.profile, etc.)
 "${TMUX[@]}" set-option -t "$SESSION" -g default-command "${SHELL:-/bin/bash}" >/dev/null
 
-# Ensure windows exist up-front (and track which ones were newly created)
+# Ensure windows exist (track which were created)
 ensure_window master     || true; created_master=$?
 ensure_window ctlmgr     || true; created_ctlmgr=$?
 ensure_window janitor    || true; created_janitor=$?
@@ -244,12 +243,11 @@ should_start() {
   [[ "$created_session" -eq 1 || "$created_rc" -eq 0 ]]
 }
 
-# Start in order (master readiness gating helps when only ctlmgr/janitor/dashboard were missing too)
+# Start in order
 if should_start "$created_master"; then
   start_in_window master "${CMD_MASTER[@]}"
 fi
 
-# Ensure master is ready (or at least had a chance) before ctlmgr
 wait_for_master_ready || sleep "$WAIT"
 
 if should_start "$created_ctlmgr"; then
@@ -264,13 +262,12 @@ if should_start "$created_dash"; then
   start_in_window dashboard "${CMD_DASH[@]}"
 fi
 
-# Interactive dev shell window (only if it was missing/new)
 if should_start "$created_shell"; then
   "${TMUX[@]}" respawn-pane -k -t "$SESSION:shell" -c "$REPO_ROOT" \
     bash --rcfile "$SHELL_RC" -i
 fi
 
-# Attach (or switch) robustly:
+# Attach / switch
 if [[ -n "${TMUX-}" && "${TMUX%%,*}" == "$SOCK" ]]; then
   exec "${TMUX[@]}" switch-client -t "$SESSION"
 else
